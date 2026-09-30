@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AgentRunResult",
+  "type": "object",
+  "properties": {
+    "outcome": {"type": "string", "enum": ["completed", "failed", "cancelled"]},
+    "answer": {"type": "string", "description": "Primary answer or summary of work for the user"},
+    "used_memory_ids": {"type": "array", "items": {"type": "string"}},
+    "memory_candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {"type": "string", "enum": ["architecture", "decision", "learning", "state", "preference", "constraint"]},
+          "scope": {"type": "string", "enum": ["global", "project"], "default": "project"},
+          "subject_key": {"type": ["string", "null"]},
+          "title": {"type": "string", "minLength": 1, "maxLength": 300},
+          "content": {"type": "string", "minLength": 1, "maxLength": 20000},
+          "importance": {"type": "integer", "minimum": 0, "maximum": 100, "default": 50},
+          "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.9},
+          "relation": {"type": "string", "enum": ["new", "supports", "updates", "contradicts"], "default": "new"},
+          "related_memory_id": {"type": ["string", "null"]},
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {"type": "string", "enum": ["file", "user", "run"]},
+                "path": {"type": ["string", "null"]},
+                "line_start": {"type": ["integer", "null"]},
+                "line_end": {"type": ["integer", "null"]},
+                "quote": {"type": ["string", "null"]}
+              },
+              "required": ["type"]
+            }
+          }
+        },
+        "required": ["kind", "title", "content"]
+      }
+    }
+  },
+  "required": ["outcome", "answer"]
+}
