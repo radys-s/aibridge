@@ -24,7 +24,7 @@ aibridge = "aibridge.cli:main"
 [dependency-groups]
 dev = [
   "mypy>=1.18,<2",
-  "pytest>=8.4,<9",
+  "pytest>=9.0.3,<10",
   "pytest-anyio>=0.0.0",
   "ruff>=0.13,<1",
   "httpx>=0.28,<1",
