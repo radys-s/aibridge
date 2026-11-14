@@ -9,6 +9,7 @@ import os
 import platform
 import re
 import sqlite3
+import time
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
@@ -134,12 +135,28 @@ class SQLiteMemoryRepository:
         try:
             connection.execute("PRAGMA foreign_keys = ON")
             connection.execute(f"PRAGMA busy_timeout = {self._settings.busy_timeout_ms:d}")
-            connection.execute("PRAGMA journal_mode = WAL")
+            self._enable_wal(connection)
             connection.execute("PRAGMA synchronous = NORMAL")
             connection.execute("PRAGMA trusted_schema = OFF")
             yield connection
         finally:
             connection.close()
+
+    def _enable_wal(self, connection: sqlite3.Connection) -> None:
+        # WAL persists in the file, so later opens only read the mode. Switching needs an
+        # exclusive lock and SQLite can report "locked" without honoring busy_timeout,
+        # which concurrent first opens hit on Windows. Retry within the same budget.
+        if str(connection.execute("PRAGMA journal_mode").fetchone()[0]).lower() == "wal":
+            return
+        deadline = time.monotonic() + self._settings.busy_timeout_ms / 1_000
+        while True:
+            try:
+                connection.execute("PRAGMA journal_mode = WAL")
+                return
+            except sqlite3.OperationalError as error:
+                if "locked" not in str(error) or time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.01)
 
     @contextmanager
     def _transaction(self, connection: sqlite3.Connection) -> Iterator[None]:
