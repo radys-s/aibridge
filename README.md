@@ -37,13 +37,14 @@ The last command prints a JSON context packet whose `memory_items` contains the 
 (abbreviated):
 
 ```json
-{"memory_items":[{"kind":"learning","title":"Refresh token rotation","content":"Refresh tokens are rotated after every successful use.","reason":"fts5", ...}],"objective":"Fix the refresh token bug", ...}
+{"memory_items":[{"content":"Refresh tokens are rotated after every successful use.","kind":"learning","memory_id":"…","reason":"fts5","score":0.5,"title":"Refresh token rotation"}],"objective":"Fix the refresh token bug", …}
 ```
 
-Retrieval is lexical (SQLite FTS5, no stemming): a memory is found when the task shares a word with
-its title or content. A task such as "Update authentication" shares no word with the memory above,
-so its packet has an empty `memory_items`. Up to five pinned memories (`--pinned`) are included
-in every packet regardless of wording.
+Retrieval is lexical (SQLite FTS5, no stemming): a memory is found when the task shares a word of
+two or more letters with its title or content. A task such as "Update authentication" shares no
+word with the memory above, so its packet has an empty `memory_items`. Up to five pinned memories
+(`--pinned`) are considered for every task whatever its wording and placed first, as long as they
+fit within `--max-chars`.
 
 By default the database is stored in the operating system's application-data directory. A
 production `AIBRIDGE_DATA_DIR` override must be absolute and is rejected when it resolves inside a
