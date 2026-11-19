@@ -19,7 +19,7 @@ from aibridge.domain.models import (
     MemoryKind,
     MemoryScope,
 )
-from aibridge.errors import CandidateStateError
+from aibridge.errors import AIBridgeError, CandidateStateError
 from aibridge.memory.curator import MemoryCurator
 
 
@@ -50,7 +50,8 @@ def test_approval_based_on_a_stale_read_is_refused(
 ) -> None:
     curator = MemoryCurator(repository, RegexSecretScanner())
     curator.approve_candidate(pending.id)
-    # A second agent read the candidate before the first approval committed.
+    # A second agent read the candidate before the first approval committed. The fix must
+    # not trust such a read: the state is checked again inside the write transaction.
     monkeypatch.setattr(repository, "get_candidate", lambda _: pending)
 
     with pytest.raises(CandidateStateError):
@@ -72,6 +73,8 @@ def test_concurrent_approvals_create_one_memory(
             outcomes.append("approved")
         except CandidateStateError:
             outcomes.append("refused")
+        except AIBridgeError as error:
+            outcomes.append(error.code)
 
     threads = [threading.Thread(target=approve) for _ in range(4)]
     for thread in threads:

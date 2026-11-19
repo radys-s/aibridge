@@ -1483,7 +1483,7 @@ class SQLiteMemoryRepository:
                     reason=reason,
                     applied_memory_id=applied_memory_id,
                 )
-        except sqlite3.Error as error:
+        except (sqlite3.Error, PydanticValidationError, ValueError) as error:
             raise RepositoryError(f"Could not resolve candidate: {error}") from error
 
     def approve_candidate(self, candidate_id: str, *, reason: str) -> MemoryItem:
@@ -1517,7 +1517,7 @@ class SQLiteMemoryRepository:
                     reason=reason,
                     applied_memory_id=item.id,
                 )
-        except sqlite3.Error as error:
+        except (sqlite3.Error, PydanticValidationError, ValueError) as error:
             raise RepositoryError(f"Could not approve candidate: {error}") from error
         return self._read_back_memory(item.id)
 
