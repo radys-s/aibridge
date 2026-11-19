@@ -2,6 +2,17 @@
 
 from __future__ import annotations
 
+from pydantic import ValidationError
+
+
+def describe_validation_error(error: ValidationError) -> str:
+    """Name each invalid field and the rule it broke, without echoing the input value."""
+    problems = []
+    for detail in error.errors(include_input=False, include_url=False):
+        field = ".".join(str(part) for part in detail["loc"]) or "input"
+        problems.append(f"{field}: {detail['msg']}")
+    return "; ".join(problems)
+
 
 class AIBridgeError(Exception):
     """Base class for expected, user-safe application failures."""

@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import cast
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -50,6 +52,16 @@ async def _handle_aibridge_error(_: Request, error: Exception) -> JSONResponse:
     return JSONResponse(status_code=_error_status(coded), content=body.model_dump())
 
 
+async def _handle_request_validation_error(_: Request, error: Exception) -> JSONResponse:
+    """Like FastAPI's 422, plus the stable code, and without echoing rejected input."""
+    problems = cast(RequestValidationError, error).errors()
+    detail = [{key: value for key, value in item.items() if key != "input"} for item in problems]
+    return JSONResponse(
+        status_code=422,
+        content={"code": "invalid_input", "detail": jsonable_encoder(detail)},
+    )
+
+
 def create_api_app(settings: Settings | None = None) -> FastAPI:
     """Callable factory used by uvicorn ``--factory`` flag."""
     resolved = settings or Settings.load()
@@ -64,6 +76,7 @@ def create_api_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = resolved
     app.add_exception_handler(AIBridgeError, _handle_aibridge_error)
+    app.add_exception_handler(RequestValidationError, _handle_request_validation_error)
 
     # Mount /v1 routers
     _v1_prefix = "/v1"

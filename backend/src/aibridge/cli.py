@@ -19,7 +19,7 @@ from aibridge.domain.models import (
     MemoryScope,
     MemoryStatus,
 )
-from aibridge.errors import AIBridgeError
+from aibridge.errors import AIBridgeError, describe_validation_error
 
 
 def _json_default(value: Any) -> Any:
@@ -269,8 +269,8 @@ def main(argv: list[str] | None = None) -> int:
     except AIBridgeError as error:
         print(f"error[{error.code}]: {error}", file=sys.stderr)
         return 2
-    except PydanticValidationError:
-        print("error[invalid_input]: Input failed schema validation.", file=sys.stderr)
+    except PydanticValidationError as error:
+        print(f"error[invalid_input]: {describe_validation_error(error)}", file=sys.stderr)
         return 2
     except OSError as error:
         print(f"error[io_error]: {error}", file=sys.stderr)
