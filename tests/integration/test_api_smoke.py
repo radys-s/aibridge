@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from aibridge import __version__
 from aibridge.api.app import create_api_app
 from aibridge.config import Settings
 
@@ -32,3 +33,9 @@ def test_run_submission_is_honestly_unavailable(tmp_path: Path) -> None:
 
     assert response.status_code == 501
     assert response.json()["code"] == "phase_not_ready"
+
+
+def test_api_reports_the_package_version(tmp_path: Path) -> None:
+    app = create_api_app(Settings.for_database(tmp_path / "data" / "aibridge.db"))
+
+    assert app.version == __version__
