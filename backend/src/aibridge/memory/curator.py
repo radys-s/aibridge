@@ -15,7 +15,6 @@ from aibridge.domain.models import (
     MemoryScope,
     MemoryStatus,
 )
-from aibridge.errors import CandidateNotFoundError, CandidateStateError
 from aibridge.memory.evidence import EvidenceVerifier
 from aibridge.ports.interfaces import MemoryRepository, SecretScanner
 
@@ -169,42 +168,12 @@ class MemoryCurator:
         )
 
     def approve_candidate(self, candidate_id: str) -> MemoryItem:
-        cand = self._repository.get_candidate(candidate_id)
-        if cand is None:
-            raise CandidateNotFoundError(f"Candidate not found: {candidate_id}")
-        if cand.state != CandidateReviewState.PENDING:
-            raise CandidateStateError(
-                f"Candidate {candidate_id} is {cand.state}; only pending candidates can be approved"
-            )
-
-        p = cand.proposal
-        mem = self._repository.add_memory(
-            space_id=cand.space_id,
-            project_id=cand.project_id,
-            scope=p.scope,
-            kind=p.kind,
-            title=p.title,
-            content=p.content,
-            subject_key=p.subject_key,
-            importance=p.importance,
-            volatility=50,
-            confidence=p.confidence,
-            pinned=False,
-        )
-        self._repository.resolve_candidate(
-            candidate_id=cand.id,
-            state=CandidateReviewState.APPROVED,
-            reason="Manually approved by user",
-            applied_memory_id=mem.id,
-        )
-        return mem
+        return self._repository.approve_candidate(candidate_id, reason="Manually approved by user")
 
     def reject_candidate(self, candidate_id: str, reason: str) -> CandidateRecord:
-        cand = self._repository.get_candidate(candidate_id)
-        if cand is None:
-            raise CandidateNotFoundError(f"Candidate not found: {candidate_id}")
         return self._repository.resolve_candidate(
-            candidate_id=cand.id,
+            candidate_id=candidate_id,
             state=CandidateReviewState.REJECTED,
             reason=reason,
+            expected_state=CandidateReviewState.PENDING,
         )

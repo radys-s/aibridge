@@ -54,7 +54,13 @@ from aibridge.domain.models import (
     SpaceCreatedPayload,
     utc_now,
 )
-from aibridge.errors import DomainValidationError, MigrationError, RepositoryError
+from aibridge.errors import (
+    CandidateNotFoundError,
+    CandidateStateError,
+    DomainValidationError,
+    MigrationError,
+    RepositoryError,
+)
 
 TOKEN_PATTERN: Final = re.compile(r"[^\W_]{2,}(?:[._/-][^\W_]+)*", re.UNICODE)
 MIGRATION_PATTERN: Final = re.compile(r"^(\d{4})_[a-z0-9_]+\.sql$")
@@ -496,6 +502,43 @@ class SQLiteMemoryRepository:
         confidence: float,
         pinned: bool,
     ) -> MemoryItem:
+        item = self._build_memory(
+            space_id=space_id,
+            project_id=project_id,
+            scope=scope,
+            kind=kind,
+            title=title,
+            content=content,
+            subject_key=subject_key,
+            importance=importance,
+            volatility=volatility,
+            confidence=confidence,
+            pinned=pinned,
+        )
+        try:
+            with self._connect() as connection, self._transaction(connection):
+                self._write_memory(connection, item)
+        except (DomainValidationError, RepositoryError):
+            raise
+        except (sqlite3.Error, PydanticValidationError) as error:
+            raise RepositoryError(f"Could not add memory: {error}") from error
+        return self._read_back_memory(item.id)
+
+    @staticmethod
+    def _build_memory(
+        *,
+        space_id: str,
+        project_id: str | None,
+        scope: MemoryScope,
+        kind: MemoryKind,
+        title: str,
+        content: str,
+        subject_key: str | None,
+        importance: int,
+        volatility: int,
+        confidence: float,
+        pinned: bool,
+    ) -> MemoryItem:
         now = utc_now()
         item_id = _new_id()
         revision_id = _new_id()
@@ -508,7 +551,7 @@ class SQLiteMemoryRepository:
                 source_agent="user",
                 created_at=now,
             )
-            candidate = MemoryItem(
+            return MemoryItem(
                 id=item_id,
                 space_id=space_id,
                 project_id=project_id,
@@ -530,34 +573,36 @@ class SQLiteMemoryRepository:
             )
         except PydanticValidationError as error:
             raise DomainValidationError("Memory input failed schema validation") from error
-        try:
-            with self._connect() as connection, self._transaction(connection):
-                if project_id is not None:
-                    project = connection.execute(
-                        "SELECT 1 FROM project WHERE id = ? AND space_id = ?",
-                        (project_id, space_id),
-                    ).fetchone()
-                    if project is None:
-                        raise DomainValidationError(
-                            "Project-scoped memory must reference a project in the same space"
-                        )
-                device_row = connection.execute(
-                    "SELECT value FROM app_meta WHERE key = 'default_device_id'"
-                ).fetchone()
-                if device_row is None:
-                    raise RepositoryError("Device identity is not initialized")
-                event = self._memory_created_event(candidate, str(device_row["value"]))
-                assert isinstance(event.payload, MemoryCreatedPayload)
-                self._insert_memory_projection(connection, event.payload)
-                self._append_event(connection, event=event, enqueue_outbound=True)
-        except (DomainValidationError, RepositoryError):
-            raise
-        except (sqlite3.Error, PydanticValidationError) as error:
-            raise RepositoryError(f"Could not add memory: {error}") from error
+
+    def _write_memory(self, connection: sqlite3.Connection, item: MemoryItem) -> None:
+        if item.project_id is not None:
+            project = connection.execute(
+                "SELECT 1 FROM project WHERE id = ? AND space_id = ?",
+                (item.project_id, item.space_id),
+            ).fetchone()
+            if project is None:
+                raise DomainValidationError(
+                    "Project-scoped memory must reference a project in the same space"
+                )
+        event = self._memory_created_event(item, self._device_id(connection))
+        assert isinstance(event.payload, MemoryCreatedPayload)
+        self._insert_memory_projection(connection, event.payload)
+        self._append_event(connection, event=event, enqueue_outbound=True)
+
+    def _read_back_memory(self, item_id: str) -> MemoryItem:
         stored = self.get_memory(item_id)
         if stored is None:
             raise RepositoryError("Memory transaction committed without a readable projection")
         return stored
+
+    @staticmethod
+    def _device_id(connection: sqlite3.Connection) -> str:
+        device_row = connection.execute(
+            "SELECT value FROM app_meta WHERE key = 'default_device_id'"
+        ).fetchone()
+        if device_row is None:
+            raise RepositoryError("Device identity is not initialized")
+        return str(device_row["value"])
 
     def _memory_created_event(self, item: MemoryItem, device_id: str) -> ChangeEvent:
         payload = MemoryCreatedPayload(
@@ -1422,52 +1467,117 @@ class SQLiteMemoryRepository:
         state: CandidateReviewState,
         reason: str | None = None,
         applied_memory_id: str | None = None,
+        expected_state: CandidateReviewState | None = None,
     ) -> CandidateRecord:
-        now = utc_now()
+        """Record a decision; with ``expected_state`` the check and write are one transaction."""
         try:
             with self._connect() as connection, self._transaction(connection):
-                existing = self.get_candidate(candidate_id)
-                if existing is None:
-                    raise RepositoryError(f"Candidate {candidate_id} not found")
-                device_row = connection.execute(
-                    "SELECT value FROM app_meta WHERE key = 'default_device_id'"
-                ).fetchone()
-                if device_row is None:
-                    raise RepositoryError("Device identity is not initialized")
-                device_id = str(device_row["value"])
-
-                updated_record = CandidateRecord(
-                    id=existing.id,
-                    space_id=existing.space_id,
-                    project_id=existing.project_id,
-                    proposed_by_run_id=existing.proposed_by_run_id,
+                existing = self._candidate_for_update(connection, candidate_id, expected_state)
+                return self._write_resolution(
+                    connection,
+                    existing,
                     state=state,
-                    relation=existing.relation,
-                    related_memory_id=existing.related_memory_id,
-                    applied_memory_id=applied_memory_id or existing.applied_memory_id,
-                    proposal=existing.proposal,
-                    risk_codes=existing.risk_codes,
-                    resolution_reason=reason or existing.resolution_reason,
-                    created_at=existing.created_at,
-                    resolved_at=now,
+                    reason=reason,
+                    applied_memory_id=applied_memory_id,
                 )
-                event = ChangeEvent(
-                    id=self._event_id_factory(),
-                    space_id=existing.space_id,
-                    device_id=device_id,
-                    project_id=existing.project_id,
-                    aggregate_type="memory_candidate",
-                    aggregate_id=existing.id,
-                    event_type="candidate.resolved",
-                    payload=CandidateResolvedPayload(candidate=updated_record),
-                    origin=EventOrigin(device_id=device_id),
-                    occurred_at=now,
-                )
-                self._apply_projection_event(connection, event)
-                self._append_event(connection, event=event, enqueue_outbound=True)
-            return updated_record
         except sqlite3.Error as error:
             raise RepositoryError(f"Could not resolve candidate: {error}") from error
+
+    def approve_candidate(self, candidate_id: str, *, reason: str) -> MemoryItem:
+        """Create the memory and mark a pending candidate approved in one transaction."""
+        try:
+            with self._connect() as connection, self._transaction(connection):
+                existing = self._candidate_for_update(
+                    connection, candidate_id, CandidateReviewState.PENDING
+                )
+                proposal = existing.proposal
+                item = self._build_memory(
+                    space_id=existing.space_id,
+                    project_id=(
+                        existing.project_id if proposal.scope is MemoryScope.PROJECT else None
+                    ),
+                    scope=proposal.scope,
+                    kind=proposal.kind,
+                    title=proposal.title,
+                    content=proposal.content,
+                    subject_key=proposal.subject_key,
+                    importance=proposal.importance,
+                    volatility=50,
+                    confidence=proposal.confidence,
+                    pinned=False,
+                )
+                self._write_memory(connection, item)
+                self._write_resolution(
+                    connection,
+                    existing,
+                    state=CandidateReviewState.APPROVED,
+                    reason=reason,
+                    applied_memory_id=item.id,
+                )
+        except sqlite3.Error as error:
+            raise RepositoryError(f"Could not approve candidate: {error}") from error
+        return self._read_back_memory(item.id)
+
+    def _candidate_for_update(
+        self,
+        connection: sqlite3.Connection,
+        candidate_id: str,
+        expected_state: CandidateReviewState | None,
+    ) -> CandidateRecord:
+        row = connection.execute(
+            "SELECT * FROM memory_candidate WHERE id = ?", (candidate_id,)
+        ).fetchone()
+        if row is None:
+            raise CandidateNotFoundError(f"Candidate not found: {candidate_id}")
+        existing = self._candidate_from_row(row)
+        if expected_state is not None and existing.state is not expected_state:
+            raise CandidateStateError(
+                f"Candidate {candidate_id} is already {existing.state}; "
+                f"only {expected_state} candidates can be reviewed"
+            )
+        return existing
+
+    def _write_resolution(
+        self,
+        connection: sqlite3.Connection,
+        existing: CandidateRecord,
+        *,
+        state: CandidateReviewState,
+        reason: str | None,
+        applied_memory_id: str | None,
+    ) -> CandidateRecord:
+        now = utc_now()
+        device_id = self._device_id(connection)
+        updated_record = CandidateRecord(
+            id=existing.id,
+            space_id=existing.space_id,
+            project_id=existing.project_id,
+            proposed_by_run_id=existing.proposed_by_run_id,
+            state=state,
+            relation=existing.relation,
+            related_memory_id=existing.related_memory_id,
+            applied_memory_id=applied_memory_id or existing.applied_memory_id,
+            proposal=existing.proposal,
+            risk_codes=existing.risk_codes,
+            resolution_reason=reason or existing.resolution_reason,
+            created_at=existing.created_at,
+            resolved_at=now,
+        )
+        event = ChangeEvent(
+            id=self._event_id_factory(),
+            space_id=existing.space_id,
+            device_id=device_id,
+            project_id=existing.project_id,
+            aggregate_type="memory_candidate",
+            aggregate_id=existing.id,
+            event_type="candidate.resolved",
+            payload=CandidateResolvedPayload(candidate=updated_record),
+            origin=EventOrigin(device_id=device_id),
+            occurred_at=now,
+        )
+        self._apply_projection_event(connection, event)
+        self._append_event(connection, event=event, enqueue_outbound=True)
+        return updated_record
 
     @staticmethod
     def _candidate_from_row(row: sqlite3.Row) -> CandidateRecord:

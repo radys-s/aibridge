@@ -138,7 +138,10 @@ class MemoryRepository(Protocol):
         state: CandidateReviewState,
         reason: str | None = None,
         applied_memory_id: str | None = None,
+        expected_state: CandidateReviewState | None = None,
     ) -> CandidateRecord: ...
+
+    def approve_candidate(self, candidate_id: str, *, reason: str) -> MemoryItem: ...
 
     def list_events(self) -> Sequence[ChangeEvent]: ...
 
