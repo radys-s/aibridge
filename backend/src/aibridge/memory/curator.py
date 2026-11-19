@@ -15,6 +15,7 @@ from aibridge.domain.models import (
     MemoryScope,
     MemoryStatus,
 )
+from aibridge.errors import CandidateNotFoundError, CandidateStateError
 from aibridge.memory.evidence import EvidenceVerifier
 from aibridge.ports.interfaces import MemoryRepository, SecretScanner
 
@@ -170,9 +171,11 @@ class MemoryCurator:
     def approve_candidate(self, candidate_id: str) -> MemoryItem:
         cand = self._repository.get_candidate(candidate_id)
         if cand is None:
-            raise ValueError(f"Candidate {candidate_id} not found")
+            raise CandidateNotFoundError(f"Candidate not found: {candidate_id}")
         if cand.state != CandidateReviewState.PENDING:
-            raise ValueError(f"Candidate {candidate_id} is in state {cand.state}, cannot approve")
+            raise CandidateStateError(
+                f"Candidate {candidate_id} is {cand.state}; only pending candidates can be approved"
+            )
 
         p = cand.proposal
         mem = self._repository.add_memory(
@@ -199,7 +202,7 @@ class MemoryCurator:
     def reject_candidate(self, candidate_id: str, reason: str) -> CandidateRecord:
         cand = self._repository.get_candidate(candidate_id)
         if cand is None:
-            raise ValueError(f"Candidate {candidate_id} not found")
+            raise CandidateNotFoundError(f"Candidate not found: {candidate_id}")
         return self._repository.resolve_candidate(
             candidate_id=cand.id,
             state=CandidateReviewState.REJECTED,

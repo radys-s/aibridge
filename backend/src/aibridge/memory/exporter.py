@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from aibridge.domain.models import MemoryItem, MemoryKind, MemoryStatus
+from aibridge.errors import ProjectNotRegisteredError
 from aibridge.ports.interfaces import MemoryRepository
 
 
@@ -17,7 +18,10 @@ class MarkdownExporter:
     def export(self, project_path: Path, output_path: Path) -> Path:
         project = self._repository.find_project_by_path(project_path)
         if project is None:
-            raise ValueError(f"Project path '{project_path}' is not registered")
+            raise ProjectNotRegisteredError(
+                f"Project is not registered: {project_path}. "
+                "Run 'aibridge project register <path>'."
+            )
 
         memories = self._repository.list_memories(
             project_id=project.id, status=MemoryStatus.ACTIVE, limit=100

@@ -29,6 +29,7 @@ from aibridge.errors import (
     DomainValidationError,
     MemoryNotFoundError,
     ProjectNotRegisteredError,
+    RunNotFoundError,
     SecretDetectedError,
 )
 from aibridge.memory.curator import MemoryCurator
@@ -196,7 +197,7 @@ class RunService:
     def show(self, run_id: str) -> RunRecord:
         record = self._repository.get_run(run_id)
         if record is None:
-            raise DomainValidationError(f"Run '{run_id}' not found")
+            raise RunNotFoundError(f"Run not found: {run_id}")
         return record
 
 

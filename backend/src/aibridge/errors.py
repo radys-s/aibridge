@@ -36,6 +36,18 @@ class MemoryNotFoundError(AIBridgeError, LookupError):
     code = "memory_not_found"
 
 
+class CandidateNotFoundError(AIBridgeError, LookupError):
+    code = "candidate_not_found"
+
+
+class CandidateStateError(AIBridgeError):
+    code = "candidate_not_pending"
+
+
+class RunNotFoundError(AIBridgeError, LookupError):
+    code = "run_not_found"
+
+
 class ContextBudgetError(AIBridgeError):
     code = "context_budget_too_small"
 
