@@ -13,7 +13,6 @@ from aibridge.api.schemas import StartRunRequest
 from aibridge.application.services import RunService
 from aibridge.bootstrap import Application
 from aibridge.domain.models import RunRecord
-from aibridge.errors import AIBridgeError
 
 router = APIRouter(prefix="/runs", tags=["runs"])
 
@@ -24,20 +23,13 @@ async def list_runs(
     application: Annotated[Application, Depends(get_application)],
     limit: Annotated[int, Query(ge=1, le=100)] = 25,
 ) -> list[RunRecord]:
-    try:
-        project = await asyncio.to_thread(
-            application.repository.find_project_by_path, Path(project_path)
-        )
-        if project is None:
-            raise HTTPException(status_code=404, detail="Project not found")
-        rows = await asyncio.to_thread(
-            application.repository.list_runs,
-            project_id=project.id,
-            limit=limit,
-        )
-        return list(rows)
-    except AIBridgeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    project = await asyncio.to_thread(application.projects.require, Path(project_path))
+    rows = await asyncio.to_thread(
+        application.repository.list_runs,
+        project_id=project.id,
+        limit=limit,
+    )
+    return list(rows)
 
 
 @router.get("/{run_id}", response_model=RunRecord)
@@ -45,10 +37,7 @@ async def get_run(
     run_id: str,
     runs: Annotated[RunService, Depends(get_runs)],
 ) -> RunRecord:
-    try:
-        return await asyncio.to_thread(runs.show, run_id)
-    except AIBridgeError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return await asyncio.to_thread(runs.show, run_id)
 
 
 @router.post("")
