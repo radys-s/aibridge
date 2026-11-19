@@ -45,3 +45,32 @@ def test_markdown_export(tmp_path: Path) -> None:
     assert "# AI Bridge Memory Snapshot" in content
     assert "Event-Driven Microkernel" in content
     assert "arch.microkernel" in content
+
+
+def test_markdown_export_includes_every_active_memory(
+    repository: SQLiteMemoryRepository, project_path: Path, tmp_path: Path
+) -> None:
+    project = repository.register_project(project_path)
+    for number in range(150):
+        repository.add_memory(
+            space_id=project.space_id,
+            project_id=project.id,
+            scope=MemoryScope.PROJECT,
+            kind=MemoryKind.LEARNING,
+            title=f"Learning {number:03d}",
+            content=f"Detail {number}",
+            subject_key=None,
+            importance=50,
+            volatility=50,
+            confidence=1.0,
+            pinned=False,
+        )
+
+    content = (
+        MarkdownExporter(repository)
+        .export(project_path, tmp_path / "out.md")
+        .read_text(encoding="utf-8")
+    )
+
+    assert "- **Active Memory Items**: 150" in content
+    assert content.count("\n### Learning ") == 150
