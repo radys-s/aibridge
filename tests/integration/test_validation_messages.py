@@ -52,4 +52,6 @@ def test_api_rejects_overlong_title_with_field_location(tmp_path: Path) -> None:
         response = client.post("/v1/memory", json=body)
 
     assert response.status_code == 422
+    assert response.json()["code"] == "invalid_input"
     assert response.json()["detail"][0]["loc"] == ["body", "title"]
+    assert "x" * 301 not in response.text
