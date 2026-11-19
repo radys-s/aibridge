@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import cast
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -44,9 +45,9 @@ def _error_status(error: AIBridgeError) -> int:
 
 async def _handle_aibridge_error(_: Request, error: Exception) -> JSONResponse:
     """Return the same stable code the CLI prints as ``error[code]``."""
-    assert isinstance(error, AIBridgeError)
-    body = ErrorResponse(code=error.code, detail=str(error))
-    return JSONResponse(status_code=_error_status(error), content=body.model_dump())
+    coded = cast(AIBridgeError, error)
+    body = ErrorResponse(code=coded.code, detail=str(coded))
+    return JSONResponse(status_code=_error_status(coded), content=body.model_dump())
 
 
 def create_api_app(settings: Settings | None = None) -> FastAPI:
@@ -69,8 +70,9 @@ def create_api_app(settings: Settings | None = None) -> FastAPI:
     error_responses: dict[int | str, dict[str, object]] = {
         400: {"model": ErrorResponse, "description": "Rejected input"},
         404: {"model": ErrorResponse, "description": "Unknown project, memory, candidate or run"},
+        500: {"model": ErrorResponse, "description": "Local storage failed"},
     }
-    app.include_router(health.router, prefix=_v1_prefix, responses=error_responses)
+    app.include_router(health.router, prefix=_v1_prefix)
     app.include_router(projects.router, prefix=_v1_prefix, responses=error_responses)
     app.include_router(memory.router, prefix=_v1_prefix, responses=error_responses)
     app.include_router(candidates.router, prefix=_v1_prefix, responses=error_responses)

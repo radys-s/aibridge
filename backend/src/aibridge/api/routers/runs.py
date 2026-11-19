@@ -6,10 +6,11 @@ import asyncio
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import JSONResponse
 
 from aibridge.api.deps import get_application, get_runs
-from aibridge.api.schemas import StartRunRequest
+from aibridge.api.schemas import ErrorResponse, StartRunRequest
 from aibridge.application.services import RunService
 from aibridge.bootstrap import Application
 from aibridge.domain.models import RunRecord
@@ -40,13 +41,11 @@ async def get_run(
     return await asyncio.to_thread(runs.show, run_id)
 
 
-@router.post("")
-async def start_run(_: StartRunRequest) -> None:
+@router.post("", status_code=501, responses={501: {"model": ErrorResponse}})
+async def start_run(_: StartRunRequest) -> JSONResponse:
     """Reject unsafe execution until Phase 3 has a durable task worker."""
-    raise HTTPException(
-        status_code=501,
-        detail={
-            "code": "phase_not_ready",
-            "message": "Submitting API runs requires the durable task worker from Phase 3.",
-        },
+    body = ErrorResponse(
+        code="phase_not_ready",
+        detail="Submitting API runs requires the durable task worker from Phase 3.",
     )
+    return JSONResponse(status_code=501, content=body.model_dump())

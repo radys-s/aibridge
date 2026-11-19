@@ -47,7 +47,7 @@ Environment: hub2 (Linux), Python 3.13, `uv sync` in a fresh clone (7.6 s), data
    (CLI) or `{"detail":"Memory input failed schema validation"}` (API). The user has to read the
    source to find the 300-character and 0-100 limits.
 6. **API errors carry no stable code.** The CLI prints `error[project_not_registered]: ...`, but
-   the API returns `{"detail": "..."}` with only a status, and uses 400 for an unregistered
+   the API returns `{"detail": "..."}` with only a status, and mostly uses 400 for an unregistered
    project and 404 for a missing memory. An agent cannot branch on the cause. `ErrorResponse` in
    `api/schemas.py` exists but is unused.
 7. **No context endpoint in the HTTP API.** Building a context packet, the core feature, is

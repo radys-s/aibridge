@@ -31,4 +31,4 @@ def test_run_submission_is_honestly_unavailable(tmp_path: Path) -> None:
         )
 
     assert response.status_code == 501
-    assert response.json()["detail"]["code"] == "phase_not_ready"
+    assert response.json()["code"] == "phase_not_ready"

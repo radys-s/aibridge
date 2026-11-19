@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from aibridge.api.app import create_api_app
 from aibridge.cli import main
 from aibridge.config import DATA_DIR_ENV, Settings
+from aibridge.domain.models import MemoryCandidateProposal, MemoryKind
 
 
 @pytest.fixture
@@ -58,6 +59,7 @@ def client(tmp_path: Path) -> TestClient:
         ("GET", "/v1/projects/missing-id", None, 404, "project_not_registered"),
         ("GET", "/v1/memory?project_path=/not/registered", None, 404, "project_not_registered"),
         ("GET", "/v1/runs?project_path=/not/registered", None, 404, "project_not_registered"),
+        ("GET", "/v1/candidates?project_path=/x", None, 404, "project_not_registered"),
     ],
 )
 def test_api_errors_carry_stable_code(
@@ -93,3 +95,24 @@ def test_api_rejected_input_is_a_client_error_with_code(client: TestClient, tmp_
 
     assert response.status_code == 400
     assert response.json()["code"] == "secret_detected"
+
+
+def test_api_approving_twice_reports_candidate_not_pending(
+    client: TestClient, tmp_path: Path
+) -> None:
+    project_path = tmp_path / "project"
+    project_path.mkdir()
+    with client:
+        application = client.app.state.application  # type: ignore[attr-defined]
+        project = application.projects.register(project_path)
+        candidate = application.repository.save_candidate(
+            space_id=project.space_id,
+            project_id=project.id,
+            proposal=MemoryCandidateProposal(kind=MemoryKind.DECISION, title="T", content="C"),
+        )
+        first = client.patch(f"/v1/candidates/{candidate.id}/approve")
+        second = client.patch(f"/v1/candidates/{candidate.id}/approve")
+
+    assert first.status_code == 200
+    assert second.status_code == 400
+    assert second.json()["code"] == "candidate_not_pending"
