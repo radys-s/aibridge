@@ -33,7 +33,9 @@ uv run aibridge memory list --project C:\path\to\project --limit 25 --cursor <ne
 ```
 
 Expected application errors are printed as `error[stable_code]: message` and return exit code 2
-without a traceback. Manual memory containing a detected credential is rejected before any
+without a traceback. The local API (`aibridge serve`) returns the same code as
+`{"code": "stable_code", "detail": "message"}`, with status 404 for an unknown project, memory,
+candidate or run and 400 for rejected input. Manual memory containing a detected credential is rejected before any
 revision, FTS row, provenance, or event is persisted.
 
 ## Verification

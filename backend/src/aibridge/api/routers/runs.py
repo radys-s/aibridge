@@ -6,14 +6,14 @@ import asyncio
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import JSONResponse
 
 from aibridge.api.deps import get_application, get_runs
-from aibridge.api.schemas import StartRunRequest
+from aibridge.api.schemas import ErrorResponse, StartRunRequest
 from aibridge.application.services import RunService
 from aibridge.bootstrap import Application
 from aibridge.domain.models import RunRecord
-from aibridge.errors import AIBridgeError
 
 router = APIRouter(prefix="/runs", tags=["runs"])
 
@@ -24,20 +24,13 @@ async def list_runs(
     application: Annotated[Application, Depends(get_application)],
     limit: Annotated[int, Query(ge=1, le=100)] = 25,
 ) -> list[RunRecord]:
-    try:
-        project = await asyncio.to_thread(
-            application.repository.find_project_by_path, Path(project_path)
-        )
-        if project is None:
-            raise HTTPException(status_code=404, detail="Project not found")
-        rows = await asyncio.to_thread(
-            application.repository.list_runs,
-            project_id=project.id,
-            limit=limit,
-        )
-        return list(rows)
-    except AIBridgeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    project = await asyncio.to_thread(application.projects.require, Path(project_path))
+    rows = await asyncio.to_thread(
+        application.repository.list_runs,
+        project_id=project.id,
+        limit=limit,
+    )
+    return list(rows)
 
 
 @router.get("/{run_id}", response_model=RunRecord)
@@ -45,19 +38,14 @@ async def get_run(
     run_id: str,
     runs: Annotated[RunService, Depends(get_runs)],
 ) -> RunRecord:
-    try:
-        return await asyncio.to_thread(runs.show, run_id)
-    except AIBridgeError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return await asyncio.to_thread(runs.show, run_id)
 
 
-@router.post("")
-async def start_run(_: StartRunRequest) -> None:
+@router.post("", status_code=501, responses={501: {"model": ErrorResponse}})
+async def start_run(_: StartRunRequest) -> JSONResponse:
     """Reject unsafe execution until Phase 3 has a durable task worker."""
-    raise HTTPException(
-        status_code=501,
-        detail={
-            "code": "phase_not_ready",
-            "message": "Submitting API runs requires the durable task worker from Phase 3.",
-        },
+    body = ErrorResponse(
+        code="phase_not_ready",
+        detail="Submitting API runs requires the durable task worker from Phase 3.",
     )
+    return JSONResponse(status_code=501, content=body.model_dump())
