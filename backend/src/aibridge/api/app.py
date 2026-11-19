@@ -13,6 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from aibridge import __version__
 from aibridge.api.bus import EventBus
 from aibridge.api.routers import candidates, health, memory, projects, runs, ws
 from aibridge.api.schemas import ErrorResponse
@@ -71,7 +72,7 @@ def create_api_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(
         title="AI Bridge",
         description="Local-first shared memory and control plane for AI agents",
-        version="0.1.0",
+        version=__version__,
         docs_url="/docs",
         redoc_url="/redoc",
         lifespan=_lifespan,
