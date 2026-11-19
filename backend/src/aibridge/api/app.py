@@ -18,7 +18,7 @@ from aibridge.api.routers import candidates, health, memory, projects, runs, ws
 from aibridge.api.schemas import ErrorResponse
 from aibridge.bootstrap import create_application
 from aibridge.config import Settings
-from aibridge.errors import AIBridgeError, RepositoryError
+from aibridge.errors import AIBridgeError, CandidateStateError, RepositoryError
 
 _WEB_DIST = Path(__file__).parent.parent.parent.parent.parent.parent / "web" / "dist"
 
@@ -40,6 +40,8 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 def _error_status(error: AIBridgeError) -> int:
     if isinstance(error, LookupError):
         return 404
+    if isinstance(error, CandidateStateError):
+        return 409
     if isinstance(error, RepositoryError):
         return 500
     return 400
@@ -83,6 +85,7 @@ def create_api_app(settings: Settings | None = None) -> FastAPI:
     error_responses: dict[int | str, dict[str, object]] = {
         400: {"model": ErrorResponse, "description": "Rejected input"},
         404: {"model": ErrorResponse, "description": "Unknown project, memory, candidate or run"},
+        409: {"model": ErrorResponse, "description": "Candidate was already reviewed"},
         500: {"model": ErrorResponse, "description": "Local storage failed"},
     }
     app.include_router(health.router, prefix=_v1_prefix)

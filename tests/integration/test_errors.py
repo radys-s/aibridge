@@ -114,5 +114,5 @@ def test_api_approving_twice_reports_candidate_not_pending(
         second = client.patch(f"/v1/candidates/{candidate.id}/approve")
 
     assert first.status_code == 200
-    assert second.status_code == 400
+    assert second.status_code == 409
     assert second.json()["code"] == "candidate_not_pending"
