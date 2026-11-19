@@ -73,4 +73,5 @@ def test_markdown_export_includes_every_active_memory(
     )
 
     assert "- **Active Memory Items**: 150" in content
-    assert content.count("\n### Learning ") == 150
+    titles = [line.removeprefix("### ") for line in content.splitlines() if line.startswith("### ")]
+    assert sorted(titles) == [f"Learning {number:03d}" for number in range(150)]
