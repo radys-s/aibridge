@@ -6,6 +6,23 @@ knowledge, retrieves only task-relevant items, and produces a bounded context pa
 
 ## Quick start
 
+Run these from a clone of this repository. Replace the project path with any existing directory
+you want AI Bridge to remember things about.
+
+macOS / Linux:
+
+```sh
+uv sync
+uv run aibridge doctor
+uv run aibridge project register /path/to/project
+uv run aibridge memory add --project /path/to/project --kind learning \
+  --title "Refresh token rotation" \
+  --content "Refresh tokens are rotated after every successful use."
+uv run aibridge context build --project /path/to/project --task "Fix the refresh token bug"
+```
+
+Windows (PowerShell):
+
 ```powershell
 uv sync
 uv run aibridge doctor
@@ -13,8 +30,20 @@ uv run aibridge project register C:\path\to\project
 uv run aibridge memory add --project C:\path\to\project --kind learning `
   --title "Refresh token rotation" `
   --content "Refresh tokens are rotated after every successful use."
-uv run aibridge context build --project C:\path\to\project --task "Update authentication"
+uv run aibridge context build --project C:\path\to\project --task "Fix the refresh token bug"
 ```
+
+The last command prints a JSON context packet whose `memory_items` contains the stored learning
+(abbreviated):
+
+```json
+{"memory_items":[{"kind":"learning","title":"Refresh token rotation","content":"Refresh tokens are rotated after every successful use.","reason":"fts5", ...}],"objective":"Fix the refresh token bug", ...}
+```
+
+Retrieval is lexical (SQLite FTS5, no stemming): a memory is found when the task shares a word with
+its title or content. A task such as "Update authentication" shares no word with the memory above,
+so its packet has an empty `memory_items`. Up to five pinned memories (`--pinned`) are included
+in every packet regardless of wording.
 
 By default the database is stored in the operating system's application-data directory. A
 production `AIBRIDGE_DATA_DIR` override must be absolute and is rejected when it resolves inside a
