@@ -60,6 +60,7 @@ from aibridge.errors import (
     DomainValidationError,
     MigrationError,
     RepositoryError,
+    describe_validation_error,
 )
 
 TOKEN_PATTERN: Final = re.compile(r"[^\W_]{2,}(?:[._/-][^\W_]+)*", re.UNICODE)
@@ -572,7 +573,9 @@ class SQLiteMemoryRepository:
                 provenance=(provenance,),
             )
         except PydanticValidationError as error:
-            raise DomainValidationError("Memory input failed schema validation") from error
+            raise DomainValidationError(
+                f"Invalid memory: {describe_validation_error(error)}"
+            ) from error
 
     def _write_memory(self, connection: sqlite3.Connection, item: MemoryItem) -> None:
         if item.project_id is not None:
