@@ -6,8 +6,11 @@ from pydantic import BaseModel, Field
 
 from aibridge.domain.models import (
     AgentExecutionPolicy,
+    MemoryContent,
     MemoryKind,
     MemoryScope,
+    MemoryTitle,
+    SubjectKey,
 )
 
 
@@ -19,10 +22,10 @@ class RegisterProjectRequest(BaseModel):
 class AddMemoryRequest(BaseModel):
     project_path: str = Field(description="Registered project path")
     kind: MemoryKind
-    title: str
-    content: str
+    title: MemoryTitle
+    content: MemoryContent
     scope: MemoryScope = MemoryScope.PROJECT
-    subject_key: str | None = None
+    subject_key: SubjectKey | None = None
     importance: int = Field(default=50, ge=0, le=100)
     volatility: int = Field(default=50, ge=0, le=100)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)

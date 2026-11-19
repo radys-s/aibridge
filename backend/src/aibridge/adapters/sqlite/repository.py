@@ -54,7 +54,12 @@ from aibridge.domain.models import (
     SpaceCreatedPayload,
     utc_now,
 )
-from aibridge.errors import DomainValidationError, MigrationError, RepositoryError
+from aibridge.errors import (
+    DomainValidationError,
+    MigrationError,
+    RepositoryError,
+    describe_validation_error,
+)
 
 TOKEN_PATTERN: Final = re.compile(r"[^\W_]{2,}(?:[._/-][^\W_]+)*", re.UNICODE)
 MIGRATION_PATTERN: Final = re.compile(r"^(\d{4})_[a-z0-9_]+\.sql$")
@@ -529,7 +534,9 @@ class SQLiteMemoryRepository:
                 provenance=(provenance,),
             )
         except PydanticValidationError as error:
-            raise DomainValidationError("Memory input failed schema validation") from error
+            raise DomainValidationError(
+                f"Invalid memory: {describe_validation_error(error)}"
+            ) from error
         try:
             with self._connect() as connection, self._transaction(connection):
                 if project_id is not None:
